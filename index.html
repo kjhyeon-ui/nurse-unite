@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>간호조직팀 액션 표 · 간트</title>
+<style>
+:root{--bg:#fff;--fg:#1d1d1f;--mut:#6b7280;--line:#e5e7eb;--card:#f6f7f9;--c0:#e11d74;--c1:#2563eb;--c2:#16a34a;--c3:#d97706;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15171c;--fg:#e8eaed;--mut:#9aa0aa;--line:#2c313a;--card:#1d2026;--c0:#f472b6;--c1:#60a5fa;--c2:#4ade80;--c3:#fbbf24}}
+:root[data-theme="dark"]{--bg:#15171c;--fg:#e8eaed;--mut:#9aa0aa;--line:#2c313a;--card:#1d2026;--c0:#f472b6;--c1:#60a5fa;--c2:#4ade80;--c3:#fbbf24}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 -apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif}
+main{max-width:1200px;margin:0 auto;padding:12px}
+section{margin-bottom:20px}
+h2{font-size:16px;margin:0 0 8px}
+.bar0{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.bar0 h2{margin:0;margin-right:auto}
+button,select,input{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 7px}
+button{cursor:pointer}button.pri{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.tw{overflow:auto;max-height:48vh;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;min-width:760px}
+th{position:sticky;top:0;background:var(--card);text-align:left;font-size:12px;color:var(--mut);padding:6px;border-bottom:1px solid var(--line);z-index:1}
+td{padding:4px;border-bottom:1px solid var(--line)}
+td input[type=text],td input:not([type]){width:100%}
+td.c{text-align:center}td input[type=checkbox]{width:18px;height:18px}
+.msg{padding:8px 10px;border-radius:6px;background:var(--card);color:var(--mut);margin-bottom:8px}
+.leg{display:flex;gap:10px;font-size:12px;align-items:center}
+.leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+#gs{overflow-x:auto;border:1px solid var(--line);border-radius:8px;position:relative}
+.gw{position:relative}
+.gr{display:flex;border-bottom:1px solid var(--line)}
+.gl{position:sticky;left:0;z-index:3;width:64px;flex:none;background:var(--bg);border-right:1px solid var(--line);padding:6px;font-weight:600;font-size:13px}
+.ga{position:relative;flex:none}
+.hd .ga{height:40px;background:var(--card)}
+.hd .gl{background:var(--card)}
+.tk{position:absolute;font-size:11px;color:var(--mut);border-left:1px solid var(--line);padding-left:3px;white-space:nowrap}
+.bar{position:absolute;height:22px;line-height:22px;font-size:12px;white-space:nowrap;padding-left:5px;border-radius:3px;border-left:3px solid var(--cc);background:color-mix(in srgb,var(--cc) 28%,transparent)}
+.bar.dn{text-decoration:line-through;opacity:.55}
+.td{position:absolute;top:0;bottom:0;width:2px;background:#ef4444;z-index:2;pointer-events:none}
+</style></head><body><main>
+<section>
+  <div class="bar0"><h2>① 액션 표</h2>
+    <label>정렬 <select id="sk"><option value="cat">분류</option><option value="start">시작일</option><option value="end">마감일</option><option value="done">완료</option></select></label>
+    <button id="sd">오름차순 ↑</button><button id="add" class="pri">+ 행 추가</button></div>
+  <div id="msg" class="msg" hidden></div>
+  <div class="tw"><table id="tbl"><thead><tr><th style="width:84px">분류</th><th style="width:140px">시작일</th><th style="width:140px">마감일</th><th>액션명</th><th style="width:46px">완료</th><th>비고</th><th style="width:56px"></th></tr></thead><tbody></tbody></table></div>
+</section>
+<section>
+  <div class="bar0"><h2>② 간트 차트</h2><div class="leg" id="leg"></div>
+    <label>보기 <select id="zm"><option value="24">일</option><option value="10" selected>주</option><option value="4">월</option></select></label>
+    <button id="today">오늘로</button></div>
+  <div id="gs"></div>
+</section>
+</main>
+<script>
+// 📌 1단계에서 얻은 구글 앱스 스크립트 웹 앱 URL을 붙여넣으세요.
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
+
+const CATS=["선전","정책","조직","일정"],COL=i=>`var(--c${i})`;
+let rows=[],sort={k:"cat",d:1},saveTimer=null;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const dn=s=>s?Math.floor(Date.parse(s+"T00:00:00Z")/864e5):null;
+const ds=n=>new Date(n*864e5).toISOString().slice(0,10);
+const todayN=()=>{const d=new Date();return Math.floor(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/864e5)};
+$("#leg").innerHTML=CATS.map((c,i)=>`<span><i style="background:${COL(i)}"></i>${c}</span>`).join("");
+
+function note(t){const m=$("#msg");m.hidden=!t;m.textContent=t||""}
+
+// 구글 시트 연동 함수
+async function fetchRows(){
+  try{
+    note("데이터를 불러오는 중...");
+    const res = await fetch(GOOGLE_SCRIPT_URL);
+    if(res.ok){
+      rows = await res.json();
+      note("");
+      render();
+      if(!$("#gs").dataset.sc){$("#gs").dataset.sc=1;scrollToday()}
+    }
+  }catch(e){
+    note("데이터를 불러오지 못했습니다.");
+  }
+}
+
+async function syncToSheet(){
+  note("구글 시트에 저장하는 중...");
+  try{
+    const res = await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'save_all', rows: rows })
+    });
+    if(res.ok){
+      note("저장 완료");
+      setTimeout(()=>note(""), 2000);
+    }
+  }catch(e){
+    note("저장에 실패했습니다.");
+  }
+}
+
+function debouncedSync(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(syncToSheet, 600);
+}
+
+function sorted(){
+  const k=sort.k,d=sort.d;
+  const val=r=>k=="cat"?CATS.indexOf(r.cat):k=="done"?(r.done?1:0):(r[k]||null);
+  return [...rows].sort((a,b)=>{
+    const x=val(a),y=val(b);
+    if(x===null&&y!==null)return 1; if(y===null&&x!==null)return -1;
+    if(x!==y&&x!==null)return (x<y?-1:1)*d;
+    return (a.start||"~").localeCompare(b.start||"~")||(a.id||"").localeCompare(b.id||"");
+  });
+}
+
+function renderTable(){
+  $("#tbl tbody").innerHTML=sorted().map(r=>`<tr data-id="${esc(r.id)}">
+<td><select data-f="cat">${CATS.map(c=>`<option ${c==r.cat?"selected":""}>${c}</option>`).join("")}</select></td>
+<td><input type="date" data-f="start" value="${esc(r.start)}"></td>
+<td><input type="date" data-f="end" value="${esc(r.end)}"></td>
+<td><input type="text" data-f="name" value="${esc(r.name)}"></td>
+<td class="c"><input type="checkbox" data-f="done" ${r.done?"checked":""}></td>
+<td><input type="text" data-f="note" value="${esc(r.note)}"></td>
+<td><button data-del>삭제</button></td></tr>`).join("");
+}
+
+function renderGantt(){
+  const dw=+$("#zm").value,T=todayN();
+  const items=rows.map(r=>{let s=dn(r.start),e=dn(r.end);if(s==null&&e==null)return null;if(s==null)s=e;if(e==null)e=s;if(s>e)[s,e]=[e,s];return{...r,s,e}}).filter(Boolean);
+  let lo=items.length?Math.min(...items.map(i=>i.s)):T,hi=items.length?Math.max(...items.map(i=>i.e)):T+60;
+  lo-=7;hi=Math.max(hi+14,lo+45);
+  const W=(hi-lo+1)*dw,lanesBy=CATS.map(()=>[]),placed=CATS.map(()=>[]);
+  items.sort((a,b)=>a.s-b.s||a.e-b.e).forEach(it=>{
+    const ci=Math.max(0,CATS.indexOf(it.cat)),left=(it.s-lo)*dw,w=(it.e-it.s+1)*dw;
+    const lw=Math.max(w,String(it.name||"").length*13+12)+6,L=lanesBy[ci];
+    let ln=L.findIndex(x=>x<=left);if(ln<0){ln=L.length;L.push(0)}
+    L[ln]=left+lw;placed[ci].push({it,left,w,ln});
+  });
+  let tk="";
+  for(let n=lo,m=-1;n<=hi;n++){
+    const d=new Date(n*864e5);
+    if(d.getUTCMonth()!==m){m=d.getUTCMonth();tk+=`<div class="tk" style="left:${(n-lo)*dw}px;top:2px;font-weight:600">${d.getUTCFullYear()}.${m+1}</div>`}
+    if(dw>=24||(dw>=10&&d.getUTCDay()==1))tk+=`<div class="tk" style="left:${(n-lo)*dw}px;top:21px">${d.getUTCDate()}</div>`;
+  }
+  const grid=dw>=24?`background-image:repeating-linear-gradient(to right,var(--line) 0 1px,transparent 1px ${dw}px)`:"";
+  let h=`<div class="gw" style="width:${W+64}px"><div class="gr hd"><div class="gl"></div><div class="ga" style="width:${W}px">${tk}</div></div>`;
+  CATS.forEach((c,ci)=>{
+    const hgt=Math.max(1,lanesBy[ci].length)*28+8;
+    h+=`<div class="gr"><div class="gl" style="color:${COL(ci)}">${c}</div><div class="ga" style="width:${W}px;height:${hgt}px;${grid}">`+
+    placed[ci].map(p=>`<div class="bar${p.it.done?" dn":""}" style="--cc:${COL(ci)};left:${p.left}px;top:${4+p.ln*28}px;width:${p.w}px" title="${esc(p.it.name)} (${ds(p.it.s)} ~ ${ds(p.it.e)})">${esc(p.it.name||"(이름 없음)")}</div>`).join("")+`</div></div>`;
+  });
+  if(T>=lo&&T<=hi)h+=`<div class="td" style="left:${64+(T-lo)*dw}px;top:0"></div>`;
+  $("#gs").innerHTML=h+`</div>`;
+  $("#gs").dataset.lo=lo;
+}
+
+function scrollToday(){const dw=+$("#zm").value,lo=+$("#gs").dataset.lo,T=todayN();$("#gs").scrollLeft=Math.max(0,(T-lo)*dw-120)}
+function render(){renderTable();renderGantt()}
+
+$("#sk").onchange=e=>{sort.k=e.target.value;renderTable()};
+$("#sd").onclick=e=>{sort.d*=-1;e.target.textContent=sort.d>0?"오름차순 ↑":"내림차순 ↓";renderTable()};
+$("#zm").onchange=()=>{renderGantt();scrollToday()};
+$("#today").onclick=scrollToday;
+
+$("#add").onclick=()=>{
+  const newRow = { id: 'act_' + Date.now(), cat: "선전", start: "", end: "", name: "", done: false, note: "" };
+  rows.push(newRow);
+  render();
+  debouncedSync();
+};
+
+$("#tbl").addEventListener("change", e => {
+  const t = e.target, tr = t.closest("tr"); if (!tr || !t.dataset.f) return;
+  const id = tr.dataset.id;
+  const row = rows.find(r => r.id === id);
+  if (row) {
+    row[t.dataset.f] = t.type === "checkbox" ? t.checked : t.value;
+    renderGantt();
+    debouncedSync();
+  }
+});
+
+$("#tbl").addEventListener("click", e => {
+  const b = e.target.closest("[data-del]"); if (!b) return;
+  if (b.dataset.arm) {
+    const id = b.closest("tr").dataset.id;
+    rows = rows.filter(r => r.id !== id);
+    render();
+    debouncedSync();
+  } else {
+    b.dataset.arm = 1;
+    b.textContent = "확인?";
+    setTimeout(() => {
+      if (b.isConnected) { delete b.dataset.arm; b.textContent = "삭제"; }
+    }, 3000);
+  }
+});
+
+fetchRows();
+</script></body></html>
