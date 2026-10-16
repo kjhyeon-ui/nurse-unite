@@ -21,21 +21,7 @@ th{position:sticky;top:0;background:var(--card);text-align:left;font-size:12px;c
 td{padding:4px;border-bottom:1px solid var(--line)}
 td input[type=text],td input:not([type]){width:100%}
 td.c{text-align:center}td input[type=checkbox]{width:18px;height:18px}
-
-.msg{
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 9999;
-  padding: 10px 16px;
-  border-radius: 8px;
-  background: var(--fg);
-  color: var(--bg);
-  font-size: 13px;
-  font-weight: 500;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-}
-
+.msg{padding:8px 10px;border-radius:6px;background:var(--card);color:var(--mut);margin-bottom:8px}
 .leg{display:flex;gap:10px;font-size:12px;align-items:center}
 .leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 #gs{overflow-x:auto;border:1px solid var(--line);border-radius:8px;position:relative}
@@ -54,6 +40,8 @@ td.c{text-align:center}td input[type=checkbox]{width:18px;height:18px}
   <div class="bar0"><h2>① 액션 표</h2>
     <label>정렬 <select id="sk"><option value="cat">분류</option><option value="start">시작일</option><option value="end">마감일</option><option value="done">완료</option></select></label>
     <button id="sd">오름차순 ↑</button><button id="add" class="pri">+ 행 추가</button></div>
+  <div id="msg" class="msg" hidden></div>
+  <div id="setup" class="msg">초기 설정 필요: 아래 안내서의 Apps Script 웹 앱 URL을 HTML의 API_URL에 입력하세요.</div>
   <div class="tw"><table id="tbl"><thead><tr><th style="width:84px">분류</th><th style="width:140px">시작일</th><th style="width:140px">마감일</th><th>액션명</th><th style="width:46px">완료</th><th>비고</th><th style="width:56px"></th></tr></thead><tbody></tbody></table></div>
 </section>
 <section>
@@ -63,14 +51,13 @@ td.c{text-align:center}td input[type=checkbox]{width:18px;height:18px}
   <div id="gs"></div>
 </section>
 </main>
-
-<div id="msg" class="msg" hidden></div>
-
 <script>
-const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx-C9UH2czSh3pbwQk_EFOvGRPHN3-d804GaFEWFqmurf_cDo44JmyrbI52CH6le3dw/exec';
-
 const CATS=["선전","정책","조직","일정"],COL=i=>`var(--c${i})`;
-let rows=[],sort={k:"cat",d:1},saveTimer=null;
+// 배포 후 Google Apps Script 웹 앱 URL을 여기에 입력하세요.
+const API_URL = "https://script.google.com/macros/s/AKfycbwtQLeCbJ_FUNj01PHkw1V78pQU-kQPdGtbngB-QgpYzOQYX0a3sSO136idKUHTg8lj/exec";
+const POLL_MS = 5000;
+let rows=[],canW=true,sort={k:"cat",d:1},pending=false;
+let lastSnapshot="",pollTimer=null;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const dn=s=>s?Math.floor(Date.parse(s+"T00:00:00Z")/864e5):null;
@@ -78,112 +65,27 @@ const ds=n=>new Date(n*864e5).toISOString().slice(0,10);
 const todayN=()=>{const d=new Date();return Math.floor(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/864e5)};
 $("#leg").innerHTML=CATS.map((c,i)=>`<span><i style="background:${COL(i)}"></i>${c}</span>`).join("");
 
-function note(t){const m=$("#msg");m.hidden=!t;m.textContent=t||""}
-
-async function fetchRows(){
-  try{
-    note("데이터를 불러오는 중...");
-    const res = await fetch(GOOGLE_SCRIPT_URL);
-    if(res.ok){
-      const data = await res.json();
-
-      
-
-      function normalizeDate(value) {
-        if (value == null || value === "") return "";
-      
-        const s = String(value).trim();
-      
-        // YYYY-MM-DD 형식만 허용
-        const match = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-        if (!match) return "";
-      
-        const y = Number(match[1]);
-        const m = Number(match[2]);
-        const d = Number(match[3]);
-      
-        return s;
-      }
-
-      
-      rows = Array.isArray(data)
-        ? data.map(r => ({
-            ...r,
-            start: normalizeDate(r.start),
-            end: normalizeDate(r.end)
-          }))
-        : [];
-      
-      // 데이터가 없으면 초기 빈 행 1개 생성
-      if(rows.length === 0){
-        rows.push({ id: 'act_' + Date.now(), cat: "선전", start: "", end: "", name: "", done: false, note: "" });
-        debouncedSync();
-      }
-      
-      note("");
-      render();
-      if(!$("#gs").dataset.sc){$("#gs").dataset.sc=1;scrollToday()}
-    }
-  }catch(e){
-    console.error(e);
-    note("데이터를 불러오지 못했습니다.");
-  }
-}
-
-async function syncToSheet(){
-  note("구글 시트에 저장하는 중...");
-  try{
-    const res = await fetch(GOOGLE_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'save_all', rows: rows })
-    });
-    if(res.ok){
-      note("저장 완료");
-      setTimeout(()=>note(""), 1500);
-    }
-  }catch(e){
-    console.error(e);
-    note("저장에 실패했습니다.");
-  }
-}
-
-function debouncedSync(){
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(syncToSheet, 600);
-}
-
 function sorted(){
   const k=sort.k,d=sort.d;
-  const val=r=>{
-    if(!r) return "";
-    if(k=="cat") return CATS.indexOf(r.cat);
-    if(k=="done") return r.done ? 1 : 0;
-    return r[k] || "";
-  };
+  const val=r=>k=="cat"?CATS.indexOf(r.cat):k=="done"?(r.done?1:0):(r[k]||null);
   return [...rows].sort((a,b)=>{
     const x=val(a),y=val(b);
-    if(x < y) return -1 * d;
-    if(x > y) return 1 * d;
-    return 0;
+    if(x===null&&y!==null)return 1; if(y===null&&x!==null)return -1;
+    if(x!==y&&x!==null)return (x<y?-1:1)*d;
+    return (a.start||"~").localeCompare(b.start||"~")||(a.ord||0)-(b.ord||0);
   });
 }
-
 function renderTable(){
-  const list = sorted();
-  const tbody = $("#tbl tbody");
-  if(!tbody) return;
-  
-  tbody.innerHTML = list.map(r=>`<tr data-id="${esc(r.id)}">
-<td><select data-f="cat">${CATS.map(c=>`<option ${c==r.cat?"selected":""}>${c}</option>`).join("")}</select></td>
-<td><input type="date" data-f="start" value="${esc(r.start)}"></td>
-<td><input type="date" data-f="end" value="${esc(r.end)}"></td>
-<td><input type="text" data-f="name" value="${esc(r.name)}"></td>
-<td class="c"><input type="checkbox" data-f="done" ${r.done?"checked":""}></td>
-<td><input type="text" data-f="note" value="${esc(r.note)}"></td>
-<td><button data-del>삭제</button></td></tr>`).join("");
+  const dis=canW?"":"disabled";
+  $("#tbl tbody").innerHTML=sorted().map(r=>`<tr data-id="${esc(r.id)}">
+<td><select data-f="cat" ${dis}>${CATS.map(c=>`<option ${c==r.cat?"selected":""}>${c}</option>`).join("")}</select></td>
+<td><input type="date" data-f="start" value="${esc(r.start)}" ${dis}></td>
+<td><input type="date" data-f="end" value="${esc(r.end)}" ${dis}></td>
+<td><input type="text" data-f="name" value="${esc(r.name)}" ${dis}></td>
+<td class="c"><input type="checkbox" data-f="done" ${r.done?"checked":""} ${dis}></td>
+<td><input type="text" data-f="note" value="${esc(r.note)}" ${dis}></td>
+<td><button data-del ${dis}>삭제</button></td></tr>`).join("");
 }
-
 function renderGantt(){
   const dw=+$("#zm").value,T=todayN();
   const items=rows.map(r=>{let s=dn(r.start),e=dn(r.end);if(s==null&&e==null)return null;if(s==null)s=e;if(e==null)e=s;if(s>e)[s,e]=[e,s];return{...r,s,e}}).filter(Boolean);
@@ -213,49 +115,86 @@ function renderGantt(){
   $("#gs").innerHTML=h+`</div>`;
   $("#gs").dataset.lo=lo;
 }
-
-function scrollToday(){const dw=+$("#zm").value,lo=+$("#gs").dataset.lo,T=todayN();if(!isNaN(lo)){$("#gs").scrollLeft=Math.max(0,(T-lo)*dw-120)}}
+function scrollToday(){const dw=+$("#zm").value,lo=+$("#gs").dataset.lo,T=todayN();$("#gs").scrollLeft=Math.max(0,(T-lo)*dw-120)}
 function render(){renderTable();renderGantt()}
+function busy(){const a=document.activeElement;return a&&$("#tbl tbody").contains(a)&&/INPUT|SELECT/.test(a.tagName)}
 
 $("#sk").onchange=e=>{sort.k=e.target.value;renderTable()};
 $("#sd").onclick=e=>{sort.d*=-1;e.target.textContent=sort.d>0?"오름차순 ↑":"내림차순 ↓";renderTable()};
 $("#zm").onchange=()=>{renderGantt();scrollToday()};
 $("#today").onclick=scrollToday;
 
-// 📌 행 추가 버튼 클릭 이벤트
-$("#add").onclick=()=>{
-  const newRow = { id: 'act_' + Date.now(), cat: "선전", start: "", end: "", name: "", done: false, note: "" };
-  rows.push(newRow);
-  render();
-  debouncedSync();
+$("#add").onclick=async()=>{
+  if(!ready()) return;
+  try { await api("add",{cat:"선전",start:"",end:"",name:"",done:false,note:"",ord:Date.now()}); await refresh(true); }
+  catch(e){fail(e)}
 };
-
-$("#tbl").addEventListener("change", e => {
-  const t = e.target, tr = t.closest("tr"); if (!tr || !t.dataset.f) return;
-  const id = tr.dataset.id;
-  const row = rows.find(r => r.id === id);
-  if (row) {
-    row[t.dataset.f] = t.type === "checkbox" ? t.checked : t.value;
-    renderGantt();
-    debouncedSync();
-  }
+$("#tbl").addEventListener("change",async e=>{
+  const t=e.target,tr=t.closest("tr");
+  if(!ready()||!tr||!t.dataset.f)return;
+  const value=t.type==="checkbox"?t.checked:t.value;
+  try { await api("update",{id:tr.dataset.id,field:t.dataset.f,value}); await refresh(true); }
+  catch(err){fail(err)}
 });
-
-$("#tbl").addEventListener("click", e => {
-  const b = e.target.closest("[data-del]"); if (!b) return;
-  if (b.dataset.arm) {
-    const id = b.closest("tr").dataset.id;
-    rows = rows.filter(r => r.id !== id);
-    render();
-    debouncedSync();
+$("#tbl").addEventListener("click",async e=>{
+  const b=e.target.closest("[data-del]");if(!b)return;
+  const tr=b.closest("tr");
+  if(b.dataset.arm){
+    try { await api("delete",{id:tr.dataset.id}); await refresh(true); }
+    catch(err){fail(err)}
   } else {
-    b.dataset.arm = 1;
-    b.textContent = "확인?";
-    setTimeout(() => {
-      if (b.isConnected) { delete b.dataset.arm; b.textContent = "삭제"; }
-    }, 3000);
+    b.dataset.arm=1;b.textContent="확인?";
+    setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent="삭제"}},3000)
   }
 });
+$("#tbl").addEventListener("focusout",()=>setTimeout(()=>{if(pending&&!busy()){pending=false;render()}},50));
+function note(t){const m=$("#msg");m.hidden=!t;m.textContent=t||""}
+function fail(e){note("저장하지 못했습니다: "+(e&&e.message||"연결 오류")+" — Apps Script 배포 URL과 시트 설정을 확인하세요.")}
+function ready(){
+  if(!API_URL || API_URL.includes("PASTE_YOUR_")){
+    note("초기 설정 필요: HTML의 API_URL에 배포한 Apps Script 웹 앱 URL을 입력하세요.");
+    return false;
+  }
+  return true;
+}
+function jsonp(url){
+  return new Promise((resolve,reject)=>{
+    const cb="gs_cb_"+Math.random().toString(36).slice(2);
+    const script=document.createElement("script");
+    const timer=setTimeout(()=>{cleanup();reject(new Error("서버 응답 시간 초과"))},15000);
+    function cleanup(){clearTimeout(timer);delete window[cb];script.remove()}
+    window[cb]=(data)=>{cleanup();if(data&&data.ok)resolve(data);else reject(new Error(data&&data.error||"API 요청 실패"))};
+    script.onerror=()=>{cleanup();reject(new Error("Apps Script에 연결할 수 없습니다"))};
+    script.src=API_URL+"?callback="+cb+"&_="+Date.now()+"&"+url;
+    document.head.appendChild(script);
+  });
+}
+function api(action,payload={}){
+  // Apps Script ContentService/CORS 호환성을 위해 JSONP GET을 사용합니다.
+  // 누구나 편집 가능한 공개 링크이므로 URL을 아는 누구나 데이터를 변경할 수 있습니다.
+  const params=new URLSearchParams({action,payload:JSON.stringify(payload)});
+  return jsonp(params.toString());
+}
+async function refresh(force=false){
+  if(!ready())return;
+  try{
+    const data=await jsonp("action=list");
+    const next=JSON.stringify(data.rows||[]);
+    if(force||(!busy()&&next!==lastSnapshot)){
+      rows=data.rows||[];
+      lastSnapshot=next;
+      render();
+    } else if(busy()&&next!==lastSnapshot){pending=true}
+    $("#setup").hidden=true;
+    note("");
+  }catch(e){note("데이터 연결 오류: "+(e.message||e))}
+}
+function startPolling(){
+  refresh(true);
+  if(pollTimer)clearInterval(pollTimer);
+  pollTimer=setInterval(()=>refresh(false),POLL_MS);
+}
+renderGantt();
+startPolling();
 
-fetchRows();
 </script></body></html>
