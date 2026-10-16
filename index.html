@@ -102,17 +102,6 @@ async function fetchRows(){
         const m = Number(match[2]);
         const d = Number(match[3]);
       
-        // 실제로 존재하는 날짜인지 검사
-        const date = new Date(Date.UTC(y, m - 1, d));
-      
-        if (
-          date.getUTCFullYear() !== y ||
-          date.getUTCMonth() !== m - 1 ||
-          date.getUTCDate() !== d
-        ) {
-          return "";
-        }
-      
         return s;
       }
 
