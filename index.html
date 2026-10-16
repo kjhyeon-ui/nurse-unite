@@ -61,8 +61,8 @@ td.c{text-align:center}td input[type=checkbox]{width:18px;height:18px}
 <script>
 const CATS=["선전","정책","조직","일정"],COL=i=>`var(--c${i})`;
 
-// Apps Script에서 [새 배포] 후 나온 새 웹 앱 URL을 넣으세요!
-const API_URL = "https://script.google.com/macros/s/AKfycbw3ke-j2FgAUpSiAELI3ZXzOZJ6CtrMGevvxVmtHbyzl2m__68vcZkBzUq3mPgm-HiY/exec";
+// Apps Script에서 [새 배포]한 뒤 생성된 새 웹 앱 URL을 입력하세요!
+const API_URL = "https://script.google.com/macros/s/AKfycbz_pChdtBQdx9XK5uwD0p1wA7YSzIKPPZ03H0Mps1KqSD3kE2BBa2eyZMPxNQwQG818/exec";
 
 let rows=[];
 let sort={k:"cat",d:1};
@@ -183,20 +183,47 @@ function scrollToday(){const dw=+\$("#zm").value,lo=+$("#gs").dataset.lo,T=today
 
 function note(t){const m=\$("#msg");m.hidden=!t;m.textContent=t||""}
 
-// 안정적인 fetch 기반 API 통신
-async function requestApi(action, payload = {}){
-  const url = API_URL + "?action=" + action + "&payload=" + encodeURIComponent(JSON.stringify(payload));
-  const res = await fetch(url);
-  const data = await res.json();
-  if(!data.ok) throw new Error(data.error || "요청에 실패했습니다.");
-  return data;
+// 구글 스크립트 리다이렉션을 완벽 우회하는 JSONP 스크립트 태그 동적 통신
+function jsonp(action, payload = {}){
+  return new Promise((resolve,reject)=>{
+    const cb = "gs_cb_" + Math.random().toString(36).substring(2);
+    const script = document.createElement("script");
+    const timer = setTimeout(()=>{ cleanup(); reject(new Error("응답 시간 초과 (Apps Script 배포 URL을 확인하세요)")) }, 15000);
+    
+    function cleanup(){
+      clearTimeout(timer);
+      delete window[cb];
+      if(script.parentNode) script.remove();
+    }
+    
+    window[cb] = (data)=>{
+      cleanup();
+      if(data && data.ok) resolve(data);
+      else reject(new Error((data && data.error) || "API 처리 실패"));
+    };
+    
+    script.onerror = ()=>{
+      cleanup();
+      reject(new Error("Google Apps Script 연결에 실패했습니다. 배포 설정을 확인하세요."));
+    };
+
+    const params = new URLSearchParams({
+      action: action,
+      payload: JSON.stringify(payload),
+      callback: cb,
+      _: Date.now()
+    });
+
+    script.src = API_URL + (API_URL.includes("?") ? "&" : "?") + params.toString();
+    document.head.appendChild(script);
+  });
 }
 
 // 불러오기
 async function fetchFromSheet(){
-  note("데이터를 불러오는 중입니다...");
+  note("구글 시트에서 데이터를 불러오는 중입니다...");
   try{
-    const data = await requestApi("list");
+    const data = await jsonp("list");
     rows = data.rows || [];
     applySortToRows();
     renderTable();
@@ -213,7 +240,7 @@ async function saveToSheet(){
   syncInputToRows();
   note("구글 시트에 일괄 저장 중입니다...");
   try {
-    await requestApi("saveAll", { rows });
+    await jsonp("saveAll", { rows });
     note("성공적으로 구글 시트에 저장되었습니다!");
     setTimeout(()=>note(""), 2000);
   } catch(e) {
@@ -224,6 +251,6 @@ async function saveToSheet(){
 \$("#fetchBtn").onclick = fetchFromSheet;
 \$("#saveBtn").onclick = saveToSheet;
 
-// 시작 시 로드
+// 시작 시 데이터 로드
 fetchFromSheet();
 </script></body></html>
