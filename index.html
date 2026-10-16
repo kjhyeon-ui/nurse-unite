@@ -71,14 +71,14 @@ const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx5bKPjR97zpi
 
 const CATS=["선전","정책","조직","일정"],COL=i=>`var(--c${i})`;
 let rows=[],sort={k:"cat",d:1},saveTimer=null;
-const \$=s=>document.querySelector(s);
+const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const dn=s=>s?Math.floor(Date.parse(s+"T00:00:00Z")/864e5):null;
 const ds=n=>new Date(n*864e5).toISOString().slice(0,10);
 const todayN=()=>{const d=new Date();return Math.floor(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/864e5)};
-\$("#leg").innerHTML=CATS.map((c,i)=>`<span><i style="background:${COL(i)}"></i>${c}</span>`).join("");
+$("#leg").innerHTML=CATS.map((c,i)=>`<span><i style="background:${COL(i)}"></i>${c}</span>`).join("");
 
-function note(t){const m=\$("#msg");m.hidden=!t;m.textContent=t||""}
+function note(t){const m=$("#msg");m.hidden=!t;m.textContent=t||""}
 
 async function fetchRows(){
   try{
@@ -145,7 +145,7 @@ function sorted(){
 
 function renderTable(){
   const list = sorted();
-  const tbody = \$("#tbl tbody");
+  const tbody = $("#tbl tbody");
   if(!tbody) return;
   
   tbody.innerHTML = list.map(r=>`<tr data-id="${esc(r.id)}">
@@ -159,7 +159,7 @@ function renderTable(){
 }
 
 function renderGantt(){
-  const dw=+\$("#zm").value,T=todayN();
+  const dw=+$("#zm").value,T=todayN();
   const items=rows.map(r=>{let s=dn(r.start),e=dn(r.end);if(s==null&&e==null)return null;if(s==null)s=e;if(e==null)e=s;if(s>e)[s,e]=[e,s];return{...r,s,e}}).filter(Boolean);
   let lo=items.length?Math.min(...items.map(i=>i.s)):T,hi=items.length?Math.max(...items.map(i=>i.e)):T+60;
   lo-=7;hi=Math.max(hi+14,lo+45);
@@ -184,27 +184,27 @@ function renderGantt(){
     placed[ci].map(p=>`<div class="bar${p.it.done?" dn":""}" style="--cc:${COL(ci)};left:${p.left}px;top:${4+p.ln*28}px;width:${p.w}px" title="${esc(p.it.name)} (${ds(p.it.s)} ~ ${ds(p.it.e)})">${esc(p.it.name||"(이름 없음)")}</div>`).join("")+`</div></div>`;
   });
   if(T>=lo&&T<=hi)h+=`<div class="td" style="left:${64+(T-lo)*dw}px;top:0"></div>`;
-  \$("#gs").innerHTML=h+`</div>`;
-  \$("#gs").dataset.lo=lo;
+  $("#gs").innerHTML=h+`</div>`;
+  $("#gs").dataset.lo=lo;
 }
 
-function scrollToday(){const dw=+\$("#zm").value,lo=+$("#gs").dataset.lo,T=todayN();if(!isNaN(lo)){$("#gs").scrollLeft=Math.max(0,(T-lo)*dw-120)}}
+function scrollToday(){const dw=+$("#zm").value,lo=+$("#gs").dataset.lo,T=todayN();if(!isNaN(lo)){$("#gs").scrollLeft=Math.max(0,(T-lo)*dw-120)}}
 function render(){renderTable();renderGantt()}
 
-\$("#sk").onchange=e=>{sort.k=e.target.value;renderTable()};
-\$("#sd").onclick=e=>{sort.d*=-1;e.target.textContent=sort.d>0?"오름차순 ↑":"내림차순 ↓";renderTable()};
-\$("#zm").onchange=()=>{renderGantt();scrollToday()};
-\$("#today").onclick=scrollToday;
+$("#sk").onchange=e=>{sort.k=e.target.value;renderTable()};
+$("#sd").onclick=e=>{sort.d*=-1;e.target.textContent=sort.d>0?"오름차순 ↑":"내림차순 ↓";renderTable()};
+$("#zm").onchange=()=>{renderGantt();scrollToday()};
+$("#today").onclick=scrollToday;
 
 // 📌 행 추가 버튼 클릭 이벤트
-\$("#add").onclick=()=>{
+$("#add").onclick=()=>{
   const newRow = { id: 'act_' + Date.now(), cat: "선전", start: "", end: "", name: "", done: false, note: "" };
   rows.push(newRow);
   render();
   debouncedSync();
 };
 
-\$("#tbl").addEventListener("change", e => {
+$("#tbl").addEventListener("change", e => {
   const t = e.target, tr = t.closest("tr"); if (!tr || !t.dataset.f) return;
   const id = tr.dataset.id;
   const row = rows.find(r => r.id === id);
@@ -215,7 +215,7 @@ function render(){renderTable();renderGantt()}
   }
 });
 
-\$("#tbl").addEventListener("click", e => {
+$("#tbl").addEventListener("click", e => {
   const b = e.target.closest("[data-del]"); if (!b) return;
   if (b.dataset.arm) {
     const id = b.closest("tr").dataset.id;
