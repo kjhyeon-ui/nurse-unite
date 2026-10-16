@@ -61,8 +61,8 @@ td.c{text-align:center}td input[type=checkbox]{width:18px;height:18px}
 <script>
 const CATS=["선전","정책","조직","일정"],COL=i=>`var(--c${i})`;
 
-// Apps Script를 [새 배포] 하신 후 발급받은 새 URL을 입력해 주세요!
-const API_URL = "https://script.google.com/macros/s/AKfycbyFX1-OHAXpTpmUOWnADj9xzmV5FMXN_ZSjgfNWeTliHYUaGG2rbqxwSCOOpau18Sq7/exec";
+// Apps Script에서 [새 배포] 후 나온 새 웹 앱 URL을 넣으세요!
+const API_URL = "https://script.google.com/macros/s/AKfycbw3ke-j2FgAUpSiAELI3ZXzOZJ6CtrMGevvxVmtHbyzl2m__68vcZkBzUq3mPgm-HiY/exec";
 
 let rows=[];
 let sort={k:"cat",d:1};
@@ -183,40 +183,20 @@ function scrollToday(){const dw=+\$("#zm").value,lo=+$("#gs").dataset.lo,T=today
 
 function note(t){const m=\$("#msg");m.hidden=!t;m.textContent=t||""}
 
-function jsonp(action, payload = {}){
-  return new Promise((resolve,reject)=>{
-    const cb="gs_cb_"+Math.random().toString(36).substring(2);
-    const script=document.createElement("script");
-    const timer=setTimeout(()=>{cleanup();reject(new Error("서버 응답 시간 초과"))},15000);
-    
-    function cleanup(){
-      clearTimeout(timer);
-      delete window[cb];
-      if(script.parentNode) script.remove();
-    }
-    
-    window[cb]=(data)=>{
-      cleanup();
-      if(data && data.ok) resolve(data);
-      else reject(new Error((data && data.error) || "API 요청 실패"));
-    };
-    
-    script.onerror=()=>{
-      cleanup();
-      reject(new Error("Apps Script 연결에 실패했습니다. 배포 URL을 확인해 주세요."));
-    };
-
-    const query = new URLSearchParams({ action, payload: JSON.stringify(payload), callback: cb, _: Date.now() });
-    script.src = API_URL + (API_URL.includes("?") ? "&" : "?") + query.toString();
-    document.head.appendChild(script);
-  });
+// 안정적인 fetch 기반 API 통신
+async function requestApi(action, payload = {}){
+  const url = API_URL + "?action=" + action + "&payload=" + encodeURIComponent(JSON.stringify(payload));
+  const res = await fetch(url);
+  const data = await res.json();
+  if(!data.ok) throw new Error(data.error || "요청에 실패했습니다.");
+  return data;
 }
 
 // 불러오기
 async function fetchFromSheet(){
   note("데이터를 불러오는 중입니다...");
   try{
-    const data = await jsonp("list");
+    const data = await requestApi("list");
     rows = data.rows || [];
     applySortToRows();
     renderTable();
@@ -233,7 +213,7 @@ async function saveToSheet(){
   syncInputToRows();
   note("구글 시트에 일괄 저장 중입니다...");
   try {
-    await jsonp("saveAll", { rows });
+    await requestApi("saveAll", { rows });
     note("성공적으로 구글 시트에 저장되었습니다!");
     setTimeout(()=>note(""), 2000);
   } catch(e) {
@@ -244,6 +224,6 @@ async function saveToSheet(){
 \$("#fetchBtn").onclick = fetchFromSheet;
 \$("#saveBtn").onclick = saveToSheet;
 
-// 시작 시 데이터 로드
+// 시작 시 로드
 fetchFromSheet();
 </script></body></html>
