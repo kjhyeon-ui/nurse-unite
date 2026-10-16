@@ -60,26 +60,17 @@ td.c{text-align:center}td input[type=checkbox]{width:18px;height:18px}
 </main>
 <script>
 const CATS=["선전","정책","조직","일정"],COL=i=>`var(--c${i})`;
-const API_URL = "https://script.google.com/macros/s/AKfycbwM0C_0M_Nbj4Q1KPBns32Y5cami8B7YBlbgOoIoVk6GJmV_YT2pFm-XN6BsLkhdLJb/exec";
+
+// Apps Script를 [새 배포] 하신 후 발급받은 새 URL을 입력해 주세요!
+const API_URL = "https://script.google.com/macros/s/AKfycbyFX1-OHAXpTpmUOWnADj9xzmV5FMXN_ZSjgfNWeTliHYUaGG2rbqxwSCOOpau18Sq7/exec";
 
 let rows=[];
-let deletedIds=[];
 let sort={k:"cat",d:1};
 
 const \$=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-
-// 날짜를 YYYY-MM-DD 형식으로 안전하게 추출하는 보완된 함수
-const cleanDate=s=>{
-  if(!s) return "";
-  const m = String(s).match(/(\d{4}-\d{2}-\d{2})/);
-  return m ? m[1] : "";
-};
-
-const dn=s=>{
-  const d = cleanDate(s);
-  return d ? Math.floor(Date.parse(d+"T00:00:00Z")/864e5) : null;
-};
+const cleanDate=s=>{if(!s)return"";const m=String(s).match(/(\d{4}-\d{2}-\d{2})/);return m?m[1]:""};
+const dn=s=>{const d=cleanDate(s);return d?Math.floor(Date.parse(d+"T00:00:00Z")/864e5):null};
 const ds=n=>new Date(n*864e5).toISOString().slice(0,10);
 const todayN=()=>{const d=new Date();return Math.floor(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/864e5)};
 \$("#leg").innerHTML=CATS.map((c,i)=>`<span><i style="background:${COL(i)}"></i>${c}</span>`).join("");
@@ -91,8 +82,8 @@ function syncInputToRows(){
     const r = rows.find(item => item.id === id);
     if(r){
       r.cat = tr.querySelector('[data-f="cat"]').value;
-      r.start = tr.querySelector('[data-f="start"]').value;
-      r.end = tr.querySelector('[data-f="end"]').value;
+      r.start = cleanDate(tr.querySelector('[data-f="start"]').value);
+      r.end = cleanDate(tr.querySelector('[data-f="end"]').value);
       r.name = tr.querySelector('[data-f="name"]').value;
       r.done = tr.querySelector('[data-f="done"]').checked;
       r.note = tr.querySelector('[data-f="note"]').value;
@@ -170,7 +161,7 @@ function scrollToday(){const dw=+\$("#zm").value,lo=+$("#gs").dataset.lo,T=today
 \$("#add").onclick=()=>{
   syncInputToRows();
   rows.push({
-    id: "temp_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6),
+    id: "act_" + Date.now(),
     cat: "선전", start: "", end: "", name: "", done: false, note: "", ord: Date.now()
   });
   renderTable();
@@ -184,11 +175,7 @@ function scrollToday(){const dw=+\$("#zm").value,lo=+$("#gs").dataset.lo,T=today
   const b=e.target.closest("[data-del]");if(!b)return;
   const tr=b.closest("tr");
   const id=tr.dataset.id;
-  
   syncInputToRows();
-  if(!id.startsWith("temp_")){
-    deletedIds.push(id);
-  }
   rows = rows.filter(r => r.id !== id);
   renderTable();
   renderGantt();
@@ -196,7 +183,7 @@ function scrollToday(){const dw=+\$("#zm").value,lo=+$("#gs").dataset.lo,T=today
 
 function note(t){const m=\$("#msg");m.hidden=!t;m.textContent=t||""}
 
-function jsonp(paramsObj){
+function jsonp(action, payload = {}){
   return new Promise((resolve,reject)=>{
     const cb="gs_cb_"+Math.random().toString(36).substring(2);
     const script=document.createElement("script");
@@ -216,58 +203,39 @@ function jsonp(paramsObj){
     
     script.onerror=()=>{
       cleanup();
-      reject(new Error("Apps Script에 연결하지 못했습니다."));
+      reject(new Error("Apps Script 연결에 실패했습니다. 배포 URL을 확인해 주세요."));
     };
 
-    const query = new URLSearchParams(paramsObj);
-    query.set("callback", cb);
-    query.set("_", Date.now());
-
+    const query = new URLSearchParams({ action, payload: JSON.stringify(payload), callback: cb, _: Date.now() });
     script.src = API_URL + (API_URL.includes("?") ? "&" : "?") + query.toString();
     document.head.appendChild(script);
   });
 }
 
+// 불러오기
 async function fetchFromSheet(){
   note("데이터를 불러오는 중입니다...");
   try{
-    const data = await jsonp({ action: "list" });
+    const data = await jsonp("list");
     rows = data.rows || [];
-    deletedIds = [];
     applySortToRows();
     renderTable();
     renderGantt();
     note("최신 데이터를 성공적으로 불러왔습니다!");
     setTimeout(()=>note(""), 2000);
   }catch(e){
-    note("데이터 연결 오류: " + (e.message || e));
+    note("불러오기 오류: " + (e.message || e));
   }
 }
 
+// 저장하기
 async function saveToSheet(){
   syncInputToRows();
-  note("시트에 저장하는 중입니다...");
+  note("구글 시트에 일괄 저장 중입니다...");
   try {
-    for(const id of deletedIds){
-      await jsonp({ action: "delete", payload: JSON.stringify({ id }) });
-    }
-    deletedIds = [];
-
-    for(const r of rows){
-      if(r.id.startsWith("temp_")){
-        const res = await jsonp({ action: "add", payload: JSON.stringify({ cat:r.cat, start:cleanDate(r.start), end:cleanDate(r.end), name:r.name, done:r.done, note:r.note, ord:r.ord }) });
-        r.id = res.id;
-      } else {
-        const fields = ["cat", "start", "end", "name", "done", "note"];
-        for(const field of fields){
-          let val = r[field];
-          if(field === "start" || field === "end") val = cleanDate(val);
-          await jsonp({ action: "update", payload: JSON.stringify({ id: r.id, field, value: val }) });
-        }
-      }
-    }
-    note("구글 시트에 성공적으로 저장되었습니다!");
-    await fetchFromSheet();
+    await jsonp("saveAll", { rows });
+    note("성공적으로 구글 시트에 저장되었습니다!");
+    setTimeout(()=>note(""), 2000);
   } catch(e) {
     note("저장 실패: " + (e.message || e));
   }
@@ -276,5 +244,6 @@ async function saveToSheet(){
 \$("#fetchBtn").onclick = fetchFromSheet;
 \$("#saveBtn").onclick = saveToSheet;
 
+// 시작 시 데이터 로드
 fetchFromSheet();
 </script></body></html>
