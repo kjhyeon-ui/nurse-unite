@@ -88,47 +88,32 @@ async function fetchRows(){
       const data = await res.json();
 
       
+
       function normalizeDate(value) {
         if (value == null || value === "") return "";
       
         const s = String(value).trim();
       
-        // YYYY-MM-DD, YYYY. M. D, YYYY/M/D 및 시간 포함 문자열
-        let match = s.match(/^(\d{4})[./-]\s*(\d{1,2})[./-]\s*(\d{1,2})/);
+        // YYYY-MM-DD 형식만 허용
+        const match = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) return "";
       
-        if (match) {
-          const y = Number(match[1]);
-          const m = Number(match[2]);
-          const d = Number(match[3]);
+        const y = Number(match[1]);
+        const m = Number(match[2]);
+        const d = Number(match[3]);
       
-          const date = new Date(Date.UTC(y, m - 1, d));
-          if (
-            date.getUTCFullYear() !== y ||
-            date.getUTCMonth() !== m - 1 ||
-            date.getUTCDate() !== d
-          ) return "";
+        // 실제로 존재하는 날짜인지 검사
+        const date = new Date(Date.UTC(y, m - 1, d));
       
-          return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        if (
+          date.getUTCFullYear() !== y ||
+          date.getUTCMonth() !== m - 1 ||
+          date.getUTCDate() !== d
+        ) {
+          return "";
         }
       
-        // MM/DD/YYYY 형식
-        match = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-        if (match) {
-          const m = Number(match[1]);
-          const d = Number(match[2]);
-          const y = Number(match[3]);
-      
-          const date = new Date(Date.UTC(y, m - 1, d));
-          if (
-            date.getUTCFullYear() !== y ||
-            date.getUTCMonth() !== m - 1 ||
-            date.getUTCDate() !== d
-          ) return "";
-      
-          return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-        }
-      
-        return "";
+        return s;
       }
 
       
