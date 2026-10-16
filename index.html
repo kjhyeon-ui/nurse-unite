@@ -90,22 +90,27 @@ async function fetchRows(){
       function normalizeDate(value) {
         if (value == null || value === "") return "";
       
-        // 이미 YYYY-MM-DD 형식이면 그대로 사용
-        if (typeof value === "string") {
-          const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
-          if (match) return match[1];
+        // 날짜 문자열은 시간대 변환 없이 처리
+        const s = String(value).trim();
+        const match = s.match(/^(\d{4})[./-]\s*(\d{1,2})[./-]\s*(\d{1,2})/);
+      
+        if (match) {
+          const year = Number(match[1]);
+          const month = Number(match[2]);
+          const day = Number(match[3]);
+      
+          if (year < 1900 || month < 1 || month > 12 ||
+              day < 1 || day > 31) return "";
+      
+          return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
         }
       
-        // ISO 날짜 문자열 또는 날짜로 변환 가능한 값 처리
-        const d = new Date(value);
-        if (Number.isNaN(d.getTime())) return "";
+        // Date 객체인 경우에도 UTC 변환으로 하루가 밀리지 않게 처리
+        if (value instanceof Date && !Number.isNaN(value.getTime())) {
+          return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+        }
       
-        // 날짜가 하루 밀리지 않도록 UTC 기준으로 변환
-        return [
-          d.getUTCFullYear(),
-          String(d.getUTCMonth() + 1).padStart(2, "0"),
-          String(d.getUTCDate()).padStart(2, "0")
-        ].join("-");
+        return "";
       }
       
       rows = Array.isArray(data)
