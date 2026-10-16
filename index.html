@@ -63,7 +63,7 @@ const CATS=["선전","정책","조직","일정"],COL=i=>`var(--c${i})`;
 const API_URL = "https://script.google.com/macros/s/AKfycbwM0C_0M_Nbj4Q1KPBns32Y5cami8B7YBlbgOoIoVk6GJmV_YT2pFm-XN6BsLkhdLJb/exec";
 
 let rows=[];
-let deletedIds=[]; // 삭제 대기 항목 ID
+let deletedIds=[];
 let sort={k:"cat",d:1};
 
 const \$=s=>document.querySelector(s);
@@ -73,7 +73,6 @@ const ds=n=>new Date(n*864e5).toISOString().slice(0,10);
 const todayN=()=>{const d=new Date();return Math.floor(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/864e5)};
 \$("#leg").innerHTML=CATS.map((c,i)=>`<span><i style="background:${COL(i)}"></i>${c}</span>`).join("");
 
-// 현재 화면 입력값을 rows 배열에 업데이트 (정렬 재실행 없이 데이터만 갱신)
 function syncInputToRows(){
   const trs = document.querySelectorAll("#tbl tbody tr");
   trs.forEach(tr => {
@@ -145,7 +144,6 @@ function renderGantt(){
 
 function scrollToday(){const dw=+\$("#zm").value,lo=+$("#gs").dataset.lo,T=todayN();$("#gs").scrollLeft=Math.max(0,(T-lo)*dw-120)}
 
-// 정렬 관련 이벤트
 \$("#sk").onchange=e=>{sort.k=e.target.value;};
 \$("#sd").onclick=e=>{sort.d*=-1;e.target.textContent=sort.d>0?"오름차순 ↑":"내림차순 ↓";};
 \$("#applySort").onclick=()=>{
@@ -158,21 +156,19 @@ function scrollToday(){const dw=+\$("#zm").value,lo=+$("#gs").dataset.lo,T=today
 \$("#zm").onchange=()=>{renderGantt();scrollToday()};
 \$("#today").onclick=scrollToday;
 
-// 새 행 추가 (화면에만 임시 추가)
 \$("#add").onclick=()=>{
   syncInputToRows();
   rows.push({
-    id: "temp_" + Date.now(),
-    cat: "선전", start: "", end: "", name: "", done: false, note: "", ord: Date.now(), isNew: true
+    id: "temp_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6),
+    cat: "선전", start: "", end: "", name: "", done: false, note: "", ord: Date.now()
   });
   renderTable();
+  renderGantt();
 };
 
-// 입력 내용 변경 시 간트 차트만 갱신 (테이블 정렬은 변경 안 됨)
 \$("#tbl").addEventListener("input", ()=>{ renderGantt(); });
 \$("#tbl").addEventListener("change", ()=>{ renderGantt(); });
 
-// 삭제 버튼 클릭
 \$("#tbl").addEventListener("click", e=>{
   const b=e.target.closest("[data-del]");if(!b)return;
   const tr=b.closest("tr");
@@ -189,79 +185,83 @@ function scrollToday(){const dw=+\$("#zm").value,lo=+$("#gs").dataset.lo,T=today
 
 function note(t){const m=\$("#msg");m.hidden=!t;m.textContent=t||""}
 
-function jsonp(url){
+function jsonp(paramsObj){
   return new Promise((resolve,reject)=>{
-    const cb="gs_cb_"+Math.random().toString(36).slice(2);
+    const cb="gs_cb_"+Math.random().toString(36).substring(2);
     const script=document.createElement("script");
     const timer=setTimeout(()=>{cleanup();reject(new Error("서버 응답 시간 초과"))},15000);
-    function cleanup(){clearTimeout(timer);delete window[cb];script.remove()}
-    window[cb]=(data)=>{cleanup();if(data&&data.ok)resolve(data);else reject(new Error(data&&data.error||"API 요청 실패"))};
-    script.onerror=()=>{cleanup();reject(new Error("Apps Script에 연결할 수 없습니다"))};
-    script.src=API_URL+"?callback="+cb+"&_="+Date.now()+"&"+url;
+    
+    function cleanup(){
+      clearTimeout(timer);
+      delete window[cb];
+      if(script.parentNode) script.remove();
+    }
+    
+    window[cb]=(data)=>{
+      cleanup();
+      if(data && data.ok) resolve(data);
+      else reject(new Error((data && data.error) || "API 요청 실패"));
+    };
+    
+    script.onerror=()=>{
+      cleanup();
+      reject(new Error("Apps Script에 연결하지 못했습니다."));
+    };
+
+    const query = new URLSearchParams(paramsObj);
+    query.set("callback", cb);
+    query.set("_", Date.now());
+
+    script.src = API_URL + (API_URL.includes("?") ? "&" : "?") + query.toString();
     document.head.appendChild(script);
   });
 }
 
-function api(action,payload={}){
-  const params=new URLSearchParams({action,payload:JSON.stringify(payload)});
-  return jsonp(params.toString());
-}
-
-// 구글 시트에서 최신 데이터 가져오기
 async function fetchFromSheet(){
-  note("데이터를 불러오는 중...");
+  note("데이터를 불러오는 중입니다...");
   try{
-    const data=await jsonp("action=list");
-    rows=data.rows||[];
-    deletedIds=[];
+    const data = await jsonp({ action: "list" });
+    rows = data.rows || [];
+    deletedIds = [];
     applySortToRows();
     renderTable();
     renderGantt();
     note("최신 데이터를 불러왔습니다.");
     setTimeout(()=>note(""), 2000);
   }catch(e){
-    note("데이터 연결 오류: "+(e.message||e));
+    note("데이터 연결 오류: " + (e.message || e));
   }
 }
 
-// 구글 시트로 변경사항 일괄 저장하기
 async function saveToSheet(){
   syncInputToRows();
   note("시트에 저장하는 중입니다...");
   try {
-    // 1. 삭제된 행 처리
     for(const id of deletedIds){
-      await api("delete", {id});
+      await jsonp({ action: "delete", payload: JSON.stringify({ id }) });
     }
     deletedIds = [];
 
-    // 2. 수정 및 새로 추가된 행 처리
     for(const r of rows){
-      if(r.isNew){
-        const res = await api("add", {cat:r.cat, start:r.start, end:r.end, name:r.name, done:r.done, note:r.note, ord:r.ord});
+      if(r.id.startsWith("temp_")){
+        const res = await jsonp({ action: "add", payload: JSON.stringify({ cat:r.cat, start:r.start, end:r.end, name:r.name, done:r.done, note:r.note, ord:r.ord }) });
         r.id = res.id;
-        delete r.isNew;
       } else {
-        // 기존 행 속성 업데이트
-        await api("update", {id: r.id, field: "cat", value: r.cat});
-        await api("update", {id: r.id, field: "start", value: r.start});
-        await api("update", {id: r.id, field: "end", value: r.end});
-        await api("update", {id: r.id, field: "name", value: r.name});
-        await api("update", {id: r.id, field: "done", value: r.done});
-        await api("update", {id: r.id, field: "note", value: r.note});
+        const fields = ["cat", "start", "end", "name", "done", "note"];
+        for(const field of fields){
+          await jsonp({ action: "update", payload: JSON.stringify({ id: r.id, field, value: r[field] }) });
+        }
       }
     }
-    
-    note("성공적으로 저장되었습니다!");
-    setTimeout(()=>note(""), 2000);
+    note("구글 시트에 성공적으로 저장되었습니다!");
+    await fetchFromSheet();
   } catch(e) {
-    note("저장 실패: "+(e.message||e));
+    note("저장 실패: " + (e.message || e));
   }
 }
 
 \$("#fetchBtn").onclick = fetchFromSheet;
 \$("#saveBtn").onclick = saveToSheet;
 
-// 초기 데이터 로드
 fetchFromSheet();
 </script></body></html>
