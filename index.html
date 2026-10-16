@@ -21,23 +21,7 @@ th{position:sticky;top:0;background:var(--card);text-align:left;font-size:12px;c
 td{padding:4px;border-bottom:1px solid var(--line)}
 td input[type=text],td input:not([type]){width:100%}
 td.c{text-align:center}td input[type=checkbox]{width:18px;height:18px}
-
-/* 📌 변경된 메시지 스타일: 화면 우측 하단 플로팅 토스트 형태 */
-.msg{
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 9999;
-  padding: 10px 16px;
-  border-radius: 8px;
-  background: var(--fg);
-  color: var(--bg);
-  font-size: 13px;
-  font-weight: 500;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  transition: opacity 0.2s ease;
-}
-
+.msg{padding:8px 10px;border-radius:6px;background:var(--card);color:var(--mut);margin-bottom:8px}
 .leg{display:flex;gap:10px;font-size:12px;align-items:center}
 .leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 #gs{overflow-x:auto;border:1px solid var(--line);border-radius:8px;position:relative}
@@ -56,6 +40,7 @@ td.c{text-align:center}td input[type=checkbox]{width:18px;height:18px}
   <div class="bar0"><h2>① 액션 표</h2>
     <label>정렬 <select id="sk"><option value="cat">분류</option><option value="start">시작일</option><option value="end">마감일</option><option value="done">완료</option></select></label>
     <button id="sd">오름차순 ↑</button><button id="add" class="pri">+ 행 추가</button></div>
+  <div id="msg" class="msg" hidden></div>
   <div class="tw"><table id="tbl"><thead><tr><th style="width:84px">분류</th><th style="width:140px">시작일</th><th style="width:140px">마감일</th><th>액션명</th><th style="width:46px">완료</th><th>비고</th><th style="width:56px"></th></tr></thead><tbody></tbody></table></div>
 </section>
 <section>
@@ -65,24 +50,20 @@ td.c{text-align:center}td input[type=checkbox]{width:18px;height:18px}
   <div id="gs"></div>
 </section>
 </main>
-
-<!-- 메시지 알림 위치 변경 -->
-<div id="msg" class="msg" hidden></div>
-
 <script>
-// 📌 본인의 구글 앱스 스크립트 웹 앱 URL로 변경하세요.
-const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx5bKPjR97zpivyebn0orboJ7-zcj9GfozoO6wrGt2kZMZHE5NeyINafTKtUvedXDzP/exec';
+// 📌 1단계에서 얻은 구글 앱스 스크립트 웹 앱 URL을 붙여넣으세요.
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwJO-4QEitY1gAZEaqaD6SaEAQSsxRzClWMeCydGMb8NfKMk2-4QyHW_bdasABjnHJg/exec';
 
 const CATS=["선전","정책","조직","일정"],COL=i=>`var(--c${i})`;
 let rows=[],sort={k:"cat",d:1},saveTimer=null;
-const \$=s=>document.querySelector(s);
+const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const dn=s=>s?Math.floor(Date.parse(s+"T00:00:00Z")/864e5):null;
 const ds=n=>new Date(n*864e5).toISOString().slice(0,10);
 const todayN=()=>{const d=new Date();return Math.floor(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/864e5)};
-\$("#leg").innerHTML=CATS.map((c,i)=>`<span><i style="background:${COL(i)}"></i>${c}</span>`).join("");
+$("#leg").innerHTML=CATS.map((c,i)=>`<span><i style="background:${COL(i)}"></i>${c}</span>`).join("");
 
-function note(t){const m=\$("#msg");m.hidden=!t;m.textContent=t||""}
+function note(t){const m=$("#msg");m.hidden=!t;m.textContent=t||""}
 
 // 구글 시트 연동 함수
 async function fetchRows(){
@@ -110,7 +91,7 @@ async function syncToSheet(){
     });
     if(res.ok){
       note("저장 완료");
-      setTimeout(()=>note(""), 1500);
+      setTimeout(()=>note(""), 2000);
     }
   }catch(e){
     note("저장에 실패했습니다.");
@@ -134,7 +115,7 @@ function sorted(){
 }
 
 function renderTable(){
-  \$("#tbl tbody").innerHTML=sorted().map(r=>`<tr data-id="${esc(r.id)}">
+  $("#tbl tbody").innerHTML=sorted().map(r=>`<tr data-id="${esc(r.id)}">
 <td><select data-f="cat">${CATS.map(c=>`<option ${c==r.cat?"selected":""}>${c}</option>`).join("")}</select></td>
 <td><input type="date" data-f="start" value="${esc(r.start)}"></td>
 <td><input type="date" data-f="end" value="${esc(r.end)}"></td>
@@ -145,7 +126,7 @@ function renderTable(){
 }
 
 function renderGantt(){
-  const dw=+\$("#zm").value,T=todayN();
+  const dw=+$("#zm").value,T=todayN();
   const items=rows.map(r=>{let s=dn(r.start),e=dn(r.end);if(s==null&&e==null)return null;if(s==null)s=e;if(e==null)e=s;if(s>e)[s,e]=[e,s];return{...r,s,e}}).filter(Boolean);
   let lo=items.length?Math.min(...items.map(i=>i.s)):T,hi=items.length?Math.max(...items.map(i=>i.e)):T+60;
   lo-=7;hi=Math.max(hi+14,lo+45);
@@ -159,7 +140,7 @@ function renderGantt(){
   let tk="";
   for(let n=lo,m=-1;n<=hi;n++){
     const d=new Date(n*864e5);
-    if(d.getUTCMonth()!==m){m=d.getUTCMonth();tk+=`<div class="tk" style="left:${(n-lo)}px;top:2px;font-weight:600">${d.getUTCFullYear()}.${m+1}</div>`}
+    if(d.getUTCMonth()!==m){m=d.getUTCMonth();tk+=`<div class="tk" style="left:${(n-lo)*dw}px;top:2px;font-weight:600">${d.getUTCFullYear()}.${m+1}</div>`}
     if(dw>=24||(dw>=10&&d.getUTCDay()==1))tk+=`<div class="tk" style="left:${(n-lo)*dw}px;top:21px">${d.getUTCDate()}</div>`;
   }
   const grid=dw>=24?`background-image:repeating-linear-gradient(to right,var(--line) 0 1px,transparent 1px ${dw}px)`:"";
@@ -170,26 +151,26 @@ function renderGantt(){
     placed[ci].map(p=>`<div class="bar${p.it.done?" dn":""}" style="--cc:${COL(ci)};left:${p.left}px;top:${4+p.ln*28}px;width:${p.w}px" title="${esc(p.it.name)} (${ds(p.it.s)} ~ ${ds(p.it.e)})">${esc(p.it.name||"(이름 없음)")}</div>`).join("")+`</div></div>`;
   });
   if(T>=lo&&T<=hi)h+=`<div class="td" style="left:${64+(T-lo)*dw}px;top:0"></div>`;
-  \$("#gs").innerHTML=h+`</div>`;
-  \$("#gs").dataset.lo=lo;
+  $("#gs").innerHTML=h+`</div>`;
+  $("#gs").dataset.lo=lo;
 }
 
-function scrollToday(){const dw=+\$("#zm").value,lo=+$("#gs").dataset.lo,T=todayN();$("#gs").scrollLeft=Math.max(0,(T-lo)*dw-120)}
+function scrollToday(){const dw=+$("#zm").value,lo=+$("#gs").dataset.lo,T=todayN();$("#gs").scrollLeft=Math.max(0,(T-lo)*dw-120)}
 function render(){renderTable();renderGantt()}
 
-\$("#sk").onchange=e=>{sort.k=e.target.value;renderTable()};
-\$("#sd").onclick=e=>{sort.d*=-1;e.target.textContent=sort.d>0?"오름차순 ↑":"내림차순 ↓";renderTable()};
-\$("#zm").onchange=()=>{renderGantt();scrollToday()};
-\$("#today").onclick=scrollToday;
+$("#sk").onchange=e=>{sort.k=e.target.value;renderTable()};
+$("#sd").onclick=e=>{sort.d*=-1;e.target.textContent=sort.d>0?"오름차순 ↑":"내림차순 ↓";renderTable()};
+$("#zm").onchange=()=>{renderGantt();scrollToday()};
+$("#today").onclick=scrollToday;
 
-\$("#add").onclick=()=>{
+$("#add").onclick=()=>{
   const newRow = { id: 'act_' + Date.now(), cat: "선전", start: "", end: "", name: "", done: false, note: "" };
   rows.push(newRow);
   render();
   debouncedSync();
 };
 
-\$("#tbl").addEventListener("change", e => {
+$("#tbl").addEventListener("change", e => {
   const t = e.target, tr = t.closest("tr"); if (!tr || !t.dataset.f) return;
   const id = tr.dataset.id;
   const row = rows.find(r => r.id === id);
@@ -200,7 +181,7 @@ function render(){renderTable();renderGantt()}
   }
 });
 
-\$("#tbl").addEventListener("click", e => {
+$("#tbl").addEventListener("click", e => {
   const b = e.target.closest("[data-del]"); if (!b) return;
   if (b.dataset.arm) {
     const id = b.closest("tr").dataset.id;
